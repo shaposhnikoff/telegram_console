@@ -36,12 +36,13 @@ func main() {
 func run() error {
 	flags := flag.NewFlagSet("telegram-tui", flag.ContinueOnError)
 	logout := flags.Bool("logout", false, "revoke the Telegram session")
+	reset := flags.Bool("reset-session", false, "back up the local session and sign in again")
 	configPath := flags.String("config", "", "path to config.json")
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 {
-		return errors.New("usage: telegram-tui [--config path] [--logout]")
+	if flags.NArg() != 0 || (*logout && *reset) {
+		return errors.New("usage: telegram-tui [--config path] [--logout | --reset-session]")
 	}
 	if *configPath == "" {
 		exe, err := os.Executable()
@@ -64,6 +65,22 @@ func run() error {
 		return sessionErr
 	}
 	reader := bufio.NewReader(os.Stdin)
+	if *reset && sessionErr == nil {
+		fmt.Fprint(os.Stderr, "Back up the existing session and sign in again? Type RESET: ")
+		answer, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(answer) != "RESET" {
+			return errors.New("session reset cancelled")
+		}
+		backupPath, err := backupSession(path)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "Previous encrypted session saved at", backupPath)
+		sessionErr = os.ErrNotExist
+	}
 	if *logout {
 		fmt.Fprint(os.Stderr, "Log out of Telegram and remove the local session? Type yes: ")
 		answer, err := reader.ReadString('\n')
@@ -101,6 +118,9 @@ func run() error {
 	defer store.Close()
 	plain, err := store.LoadSession(context.Background())
 	if err != nil {
+		if errors.Is(err, session.ErrPassphrase) {
+			return fmt.Errorf("%w; enter the local passphrase chosen on first run, or use --reset-session to back up this file and sign in again: %s", err, path)
+		}
 		return err
 	}
 	for i := range plain {
@@ -178,6 +198,23 @@ func run() error {
 	return nil
 }
 
+func backupSession(path string) (string, error) {
+	f, err := os.CreateTemp(filepath.Dir(path), "session.enc.backup-*")
+	if err != nil {
+		return "", err
+	}
+	backupPath := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(backupPath)
+		return "", err
+	}
+	if err := os.Rename(path, backupPath); err != nil {
+		_ = os.Remove(backupPath)
+		return "", err
+	}
+	return backupPath, nil
+}
+
 type prompter struct {
 	reader *bufio.Reader
 	phone  string
@@ -189,14 +226,33 @@ func (p prompter) Phone(context.Context) (string, error) {
 	}
 	return p.line("Phone number with country code: ")
 }
-func (p prompter) Code(context.Context, *tg.AuthSentCode) (string, error) {
-	b, err := secret("Telegram sign-in code: ")
+func (p prompter) Code(_ context.Context, sent *tg.AuthSentCode) (string, error) {
+	b, err := secret(codePrompt(sent))
 	defer func() {
 		for i := range b {
 			b[i] = 0
 		}
 	}()
-	return string(b), err
+	return strings.TrimSpace(string(b)), err
+}
+
+func codePrompt(sent *tg.AuthSentCode) string {
+	if sent == nil {
+		return "Telegram sign-in code: "
+	}
+	switch sent.Type.(type) {
+	case *tg.AuthSentCodeTypeApp:
+		return "Telegram sign-in code from your Telegram app: "
+	case *tg.AuthSentCodeTypeSMS, *tg.AuthSentCodeTypeFirebaseSMS, *tg.AuthSentCodeTypeFragmentSMS,
+		*tg.AuthSentCodeTypeSMSWord, *tg.AuthSentCodeTypeSMSPhrase:
+		return "Telegram sign-in code from SMS: "
+	case *tg.AuthSentCodeTypeCall, *tg.AuthSentCodeTypeFlashCall, *tg.AuthSentCodeTypeMissedCall:
+		return "Telegram sign-in code from phone call: "
+	case *tg.AuthSentCodeTypeEmailCode:
+		return "Telegram sign-in code from email: "
+	default:
+		return "Telegram sign-in code: "
+	}
 }
 func (p prompter) Password(context.Context) (string, error) {
 	b, err := secret("Telegram 2FA password: ")

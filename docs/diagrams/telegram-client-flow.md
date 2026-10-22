@@ -5,10 +5,15 @@ flowchart TD
     A[Start binary] --> B[Read private config beside binary and session passphrase]
     B --> C[Open encrypted session]
     C -->|wrong passphrase| X[Show error and preserve session]
+    X -->|reset requested and confirmed| Y[Move encrypted session to backup]
+    Y --> B
     C -->|valid or first run| D[Connect to Telegram]
     D --> E{Already authorized}
-    E -->|no| F[Phone, code, optional 2FA]
-    F --> G[Save encrypted session]
+    E -->|no| F[Send code to phone account]
+    F --> FC[Show delivery channel and trim code input]
+    FC -->|invalid code| FE[Show Telegram error; retry app with latest code]
+    FC -->|valid code| FP[Optional 2FA]
+    FP --> G[Save encrypted session]
     E -->|yes| H[Load chats]
     G --> H
     H --> I[Chat list]

@@ -17,7 +17,11 @@ go build -o dist/telegram-tui ./cmd/telegram-tui
 ./dist/telegram-tui
 ```
 
-The binary reads `config.json` next to itself, even when launched from another directory. Use `--config /path/to/config.json` to select another file. The first run asks for a local session passphrase, then a phone number if it is absent from the config, a Telegram sign-in code, and the Telegram 2FA password when needed. Later runs need the local passphrase. The app credentials belong to the Telegram application; the account itself still signs in by phone. The encrypted MTProto session is stored at the operating system user config directory under `telegram-tui/session.enc`, with file mode `0600`. Losing the passphrase means signing in again after removing the encrypted session file yourself.
+The binary reads `config.json` next to itself, even when launched from another directory. Use `--config /path/to/config.json` to select another file. The first run asks you to **create and confirm a local session passphrase**, then asks for a phone number if it is absent from the config, a Telegram sign-in code, and the Telegram 2FA password when needed. Later runs need that same local passphrase. It is separate from the Telegram code and 2FA password. The app credentials belong to the Telegram application; the account itself still signs in by phone. Telegram may deliver the sign-in code inside an existing Telegram app rather than by SMS.
+
+The encrypted MTProto session is stored at `~/Library/Application Support/telegram-tui/session.enc` on macOS or under `$XDG_CONFIG_HOME/telegram-tui/session.enc` on Linux (default `~/.config/telegram-tui/session.enc`). It has mode `0600`. If you forgot the local passphrase or the session is damaged, run `./dist/telegram-tui --reset-session`. After you type `RESET`, the old encrypted file is moved to a uniquely named backup in the same directory; the app then asks for a new local passphrase and signs in by phone. You can also move `session.enc` aside manually. Neither method changes a Python/Telethon session.
+
+If Telegram returns `PHONE_CODE_INVALID`, start the app again and enter the newest code from the delivery channel named in the prompt. A code from an earlier attempt will not work. Do not use `--reset-session` for this error, and do not share the code with anyone.
 
 ## Keys
 
