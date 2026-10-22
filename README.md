@@ -6,17 +6,18 @@ A terminal client for one personal Telegram account, written in Go. It uses MTPr
 
 - Go 1.27.1 or newer in the Go 1.27 series
 - macOS or Linux and an interactive terminal
-- Your own Telegram `api_id` and `api_hash` from [my.telegram.org](https://my.telegram.org)
+- Telegram application `api_id` and `api_hash` from [my.telegram.org](https://my.telegram.org)
 
 ## Run
 
+Build once, then edit `dist/config.json` using the format in [config.example.json](config.example.json). Put your application `api_id` and `api_hash` there. `phone` is optional; when blank, the app prompts for a number. Keep this file private (`chmod 600 dist/config.json`). The `dist/` directory is ignored by Git.
+
 ```sh
-export TELEGRAM_API_ID=123456
-export TELEGRAM_API_HASH=your_api_hash
-go run ./cmd/telegram-tui
+go build -o dist/telegram-tui ./cmd/telegram-tui
+./dist/telegram-tui
 ```
 
-The first run asks for a local session passphrase, your phone number, a Telegram sign-in code, and the Telegram 2FA password when needed. Later runs need the local passphrase. Telegram API credentials are read only from the environment and are never stored by the application. The encrypted MTProto session is stored at the operating system user config directory under `telegram-tui/session.enc`, with file mode `0600`. Losing the passphrase means signing in again after removing the encrypted session file yourself.
+The binary reads `config.json` next to itself, even when launched from another directory. Use `--config /path/to/config.json` to select another file. The first run asks for a local session passphrase, then a phone number if it is absent from the config, a Telegram sign-in code, and the Telegram 2FA password when needed. Later runs need the local passphrase. The app credentials belong to the Telegram application; the account itself still signs in by phone. The encrypted MTProto session is stored at the operating system user config directory under `telegram-tui/session.enc`, with file mode `0600`. Losing the passphrase means signing in again after removing the encrypted session file yourself.
 
 ## Keys
 
@@ -29,7 +30,7 @@ The first run asks for a local session passphrase, your phone number, a Telegram
 
 `Ctrl+C` exits from any screen. A failed send leaves the text in the composer. Inspect the chat before manually retrying because a network timeout cannot prove whether Telegram accepted the message.
 
-To log out, run `go run ./cmd/telegram-tui --logout`. The command requires a typed `yes` confirmation and your session passphrase. It asks Telegram to revoke the session, then removes the local encrypted file only after Telegram confirms success.
+To log out, run `./dist/telegram-tui --logout`. The command requires a typed `yes` confirmation and your session passphrase. It asks Telegram to revoke the session, then removes the local encrypted file only after Telegram confirms success.
 
 ## Security and limitations
 
@@ -43,7 +44,7 @@ This is an early client. Dialogs and search results are loaded in pages. A gotd 
 go test ./...
 go test -race ./...
 go vet ./...
-go build ./cmd/telegram-tui
+go build -o dist/telegram-tui ./cmd/telegram-tui
 ```
 
 See [the implementation plan](docs/telegram-tui-plan.md) and [current work tracking](tasks/todo.md). No automated test needs Telegram credentials.

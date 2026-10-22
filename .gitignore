@@ -1,6 +1,7 @@
 # Local credentials and build outputs
 .env
 .env.*
+/config.json
 *.session
 *.session.enc
 session.enc

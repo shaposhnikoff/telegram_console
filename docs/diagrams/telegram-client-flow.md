@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TD
-    A[Start] --> B[Read API credentials and session passphrase]
+    A[Start binary] --> B[Read private config beside binary and session passphrase]
     B --> C[Open encrypted session]
     C -->|wrong passphrase| X[Show error and preserve session]
     C -->|valid or first run| D[Connect to Telegram]

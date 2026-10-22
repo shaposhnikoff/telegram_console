@@ -12,7 +12,7 @@ Media, files, calls, reactions, editing, deleting, multiple accounts, and offlin
 - Use `github.com/gotd/td` for a personal-account MTProto connection. Evaluate its update and gap-handling facilities before adding custom synchronization logic.
 - Use Bubble Tea v2, Bubbles v2, and Lip Gloss v2 for the TUI. Keep network calls outside the view/update logic.
 - Separate the Telegram adapter, application state, and TUI behind a small interface so interface tests need no live account.
-- Read `api_id` and `api_hash` from environment variables. Never log or commit credentials, login codes, passwords, or sessions.
+- Read `api_id` and `api_hash` from a private `config.json` next to the binary; an optional phone number can also be stored there. Never log or commit real credentials, login codes, passwords, or sessions.
 - Encrypt the local session using a user-entered passphrase, Argon2id, and XChaCha20-Poly1305. Store it in the user data directory with mode `0600` and atomic replacement. A wrong passphrase must not destroy the saved session.
 - Keep message history only in process memory. Reopen the encrypted session and fetch chats and history after restarting.
 - Show connecting, reconnecting, loading, and failure states. Do not automatically retry a send when the result of the previous attempt is unknown.
@@ -70,4 +70,4 @@ Handle shutdown, document installation and login, check key bindings and termina
 
 ## Assumptions and review policy
 
-The app is local with no server or telemetry. Users provide their own Telegram API credentials. Dependency versions are selected and pinned after a compatibility check in iteration 0. The plan may be revised after review, with the reason noted here and the resulting work updated in `tasks/todo.md`.
+The app is local with no server or telemetry. Users provide their own Telegram application credentials once in a private configuration file; account sign-in still uses a phone number and Telegram code. Dependency versions are selected and pinned after a compatibility check in iteration 0. The plan may be revised after review, with the reason noted here and the resulting work updated in `tasks/todo.md`.

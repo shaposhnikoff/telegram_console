@@ -5,11 +5,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -19,6 +19,7 @@ import (
 	"github.com/gotd/td/telegram/updates"
 	"github.com/gotd/td/telegram/updates/hook"
 	"github.com/gotd/td/tg"
+	"github.com/shaposhnikoff/telegram_console/internal/config"
 	"github.com/shaposhnikoff/telegram_console/internal/session"
 	backend "github.com/shaposhnikoff/telegram_console/internal/telegram"
 	"github.com/shaposhnikoff/telegram_console/internal/ui"
@@ -33,17 +34,25 @@ func main() {
 }
 
 func run() error {
-	logout := len(os.Args) == 2 && os.Args[1] == "--logout"
-	if len(os.Args) > 1 && !logout {
-		return errors.New("usage: telegram-tui [--logout]")
+	flags := flag.NewFlagSet("telegram-tui", flag.ContinueOnError)
+	logout := flags.Bool("logout", false, "revoke the Telegram session")
+	configPath := flags.String("config", "", "path to config.json")
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		return err
 	}
-	appID, err := strconv.Atoi(os.Getenv("TELEGRAM_API_ID"))
-	if err != nil || appID <= 0 {
-		return errors.New("set TELEGRAM_API_ID to your numeric Telegram app ID")
+	if flags.NArg() != 0 {
+		return errors.New("usage: telegram-tui [--config path] [--logout]")
 	}
-	appHash := os.Getenv("TELEGRAM_API_HASH")
-	if appHash == "" {
-		return errors.New("set TELEGRAM_API_HASH")
+	if *configPath == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		*configPath = filepath.Join(filepath.Dir(exe), "config.json")
+	}
+	settings, err := config.Load(*configPath)
+	if err != nil {
+		return err
 	}
 	dataDir, err := os.UserConfigDir()
 	if err != nil {
@@ -55,7 +64,7 @@ func run() error {
 		return sessionErr
 	}
 	reader := bufio.NewReader(os.Stdin)
-	if logout {
+	if *logout {
 		fmt.Fprint(os.Stderr, "Log out of Telegram and remove the local session? Type yes: ")
 		answer, err := reader.ReadString('\n')
 		if err != nil {
@@ -69,7 +78,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if errors.Is(sessionErr, os.ErrNotExist) && !logout {
+	if errors.Is(sessionErr, os.ErrNotExist) && !*logout {
 		confirmation, err := secret("Confirm new session passphrase: ")
 		if err != nil {
 			return err
@@ -118,7 +127,7 @@ func run() error {
 			}
 		},
 	})
-	client := telegram.NewClient(appID, appHash, telegram.Options{
+	client := telegram.NewClient(settings.APIID, settings.APIHash, telegram.Options{
 		SessionStorage: store,
 		Middlewares:    []telegram.Middleware{hook.AffectedHook(gaps)},
 		OnConnectionState: func(state telegram.ConnectionState) {
@@ -130,7 +139,7 @@ func run() error {
 	})
 	b = backend.New(client)
 	err = client.Run(ctx, func(ctx context.Context) error {
-		if logout {
+		if *logout {
 			status, err := client.Auth().Status(ctx)
 			if err != nil {
 				return err
@@ -142,7 +151,7 @@ func run() error {
 			}
 			return nil
 		}
-		if err := client.Auth().IfNecessary(ctx, auth.NewFlow(prompter{reader}, auth.SendCodeOptions{})); err != nil {
+		if err := client.Auth().IfNecessary(ctx, auth.NewFlow(prompter{reader: reader, phone: settings.Phone}, auth.SendCodeOptions{})); err != nil {
 			return fmt.Errorf("authentication: %w", err)
 		}
 		self, err := client.Self(ctx)
@@ -160,7 +169,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if logout {
+	if *logout {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -169,9 +178,15 @@ func run() error {
 	return nil
 }
 
-type prompter struct{ reader *bufio.Reader }
+type prompter struct {
+	reader *bufio.Reader
+	phone  string
+}
 
 func (p prompter) Phone(context.Context) (string, error) {
+	if p.phone != "" {
+		return p.phone, nil
+	}
 	return p.line("Phone number with country code: ")
 }
 func (p prompter) Code(context.Context, *tg.AuthSentCode) (string, error) {
