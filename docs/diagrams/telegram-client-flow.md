@@ -2,13 +2,20 @@
 
 ```mermaid
 flowchart TD
-    A[Start binary] --> B[Read private config beside binary and session passphrase]
-    B --> C[Open encrypted session]
+    A[Start binary] --> B[Read private config beside binary]
+    B -->|import Telethon flag| TI[Read Telethon SQLite session in read-only mode]
+    TI -->|valid key| BP[Ask for local session passphrase]
+    TI -->|invalid source| TE[Stop without changing source or Go session]
+    B -->|normal run| BP
+    BP -->|import| TB[Encrypt and store separate Go session]
+    TB --> C[Open encrypted session]
+    BP -->|normal run| C
     C -->|wrong passphrase| X[Show error and preserve session]
     X -->|reset requested and confirmed| Y[Move encrypted session to backup]
     Y --> B
     C -->|valid or first run| D[Connect to Telegram]
     D --> E{Already authorized}
+    E -->|no after import| IE[Stop without requesting a code]
     E -->|no| F[Send code to phone account]
     F --> FC[Show delivery channel and trim code input]
     FC -->|invalid code| FE[Show Telegram error; retry app with latest code]

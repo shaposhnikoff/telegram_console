@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	tea "charm.land/bubbletea/v2"
+	gotdsession "github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/telegram/updates"
@@ -37,12 +38,13 @@ func run() error {
 	flags := flag.NewFlagSet("telegram-tui", flag.ContinueOnError)
 	logout := flags.Bool("logout", false, "revoke the Telegram session")
 	reset := flags.Bool("reset-session", false, "back up the local session and sign in again")
+	importTelethon := flags.String("import-telethon-session", "", "import an existing Telethon SQLite session")
 	configPath := flags.String("config", "", "path to config.json")
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || (*logout && *reset) {
-		return errors.New("usage: telegram-tui [--config path] [--logout | --reset-session]")
+	if flags.NArg() != 0 || (*logout && (*reset || *importTelethon != "")) {
+		return errors.New("usage: telegram-tui [--config path] [--logout | --reset-session] [--import-telethon-session path]")
 	}
 	if *configPath == "" {
 		exe, err := os.Executable()
@@ -63,6 +65,17 @@ func run() error {
 	_, sessionErr := os.Stat(path)
 	if sessionErr != nil && !errors.Is(sessionErr, os.ErrNotExist) {
 		return sessionErr
+	}
+	var imported *gotdsession.Data
+	if *importTelethon != "" {
+		if sessionErr == nil && !*reset {
+			return errors.New("Go session already exists; add --reset-session to back it up before importing")
+		}
+		imported, err = session.ReadTelethon(context.Background(), *importTelethon)
+		if err != nil {
+			return err
+		}
+		defer clear(imported.AuthKey)
 	}
 	reader := bufio.NewReader(os.Stdin)
 	if *reset && sessionErr == nil {
@@ -116,6 +129,12 @@ func run() error {
 		pass[i] = 0
 	}
 	defer store.Close()
+	if imported != nil {
+		loader := gotdsession.Loader{Storage: store}
+		if err := loader.Save(context.Background(), imported); err != nil {
+			return fmt.Errorf("store imported session: %w", err)
+		}
+	}
 	plain, err := store.LoadSession(context.Background())
 	if err != nil {
 		if errors.Is(err, session.ErrPassphrase) {
@@ -170,6 +189,15 @@ func run() error {
 				}
 			}
 			return nil
+		}
+		if imported != nil {
+			status, err := client.Auth().Status(ctx)
+			if err != nil {
+				return fmt.Errorf("check imported Telethon session: %w", err)
+			}
+			if !status.Authorized {
+				return errors.New("imported Telethon session is not authorized; no sign-in code was requested")
+			}
 		}
 		if err := client.Auth().IfNecessary(ctx, auth.NewFlow(prompter{reader: reader, phone: settings.Phone}, auth.SendCodeOptions{})); err != nil {
 			return fmt.Errorf("authentication: %w", err)

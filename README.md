@@ -23,6 +23,14 @@ The encrypted MTProto session is stored at `~/Library/Application Support/telegr
 
 If Telegram returns `PHONE_CODE_INVALID`, start the app again and enter the newest code from the delivery channel named in the prompt. A code from an earlier attempt will not work. Do not use `--reset-session` for this error, and do not share the code with anyone.
 
+Disabling Telegram's two-step password does not disable the one-time sign-in code for a new client. To reuse an already authorized Telethon session, close the Python script and import its `anon.session` SQLite file once:
+
+```sh
+./dist/telegram-tui --import-telethon-session /path/to/anon.session
+```
+
+Telethon creates `anon.session` in the directory from which the Python script was launched. The import reads that file without changing it and stores a separate encrypted Go session. It asks you to create a local session passphrase. If a Go session already exists, add `--reset-session` to back it up after confirmation. If the imported session is not authorized, the app reports that condition without requesting another sign-in code. Subsequent runs use `./dist/telegram-tui` with the local passphrase.
+
 ## Keys
 
 | Screen | Keys |
